@@ -7,7 +7,9 @@ export default function Routes() {
     const {username, id} = useContext(UserContext);
 
     if(username) {
-        <Chat />
+        return (
+            <Chat />
+        )
     }
 
     return (
