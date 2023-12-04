@@ -14,10 +14,20 @@ export default function Chat() {
     const {username, id} = useContext(UserContext);
     const divUnderMessages = useRef();
     useEffect(() => {
+        connectToWs();
+    },[]);
+
+    function connectToWs() {
         const ws = new WebSocket('ws://localhost:4040');
         setWs(ws);
-        ws.addEventListener('message', handleMessage)
-    },[]);
+        ws.addEventListener('message', handleMessage);
+        ws.addEventListener('close', () => {
+            setTimeout(() => {
+                console.log('Disconnected. Trying to reconnect.');
+                connectToWs();
+            }, 1000);
+        });
+    }
 
     function showOnlinePeople(peopleArray) {
         const people = {};
