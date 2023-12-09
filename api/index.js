@@ -6,6 +6,7 @@ const jwt = require('jsonwebtoken');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const ws = require('ws')
+const fs = require('fs');
 const User = require('./models/User');
 const Message = require('./models/Message');
 
@@ -18,6 +19,8 @@ const jwtSecret = process.env.JWT_SECRET;
 const bcryptSalt = bcrypt.genSaltSync(10);
 
 const app = express();
+
+app.use('/uploads', express.static(__dirname + '/uploads'));
 
 app.use(express.json());
 
@@ -91,6 +94,10 @@ app.post('/login', async (req, res) => {
     }
 });
 
+app.post('/logout', (req, res) => {
+    res.cookie('token', '', {sameSite:'none', secure:true}).json('ok');
+})
+
 app.post('/register', async (req, res) => {
     const {username, password} = req.body;
     try {
@@ -130,6 +137,7 @@ wss.on('connection', (connection, req) => {
         connection.ping();
         connection.deathTimer = setTimeout(() => {
             connection.isAlive = false;
+            clearInterval(connection.timer);
             connection.terminate();
             notifyAboutOnlinePeople();
         }, 1000);
@@ -158,12 +166,26 @@ wss.on('connection', (connection, req) => {
 
     connection.on('message', async (message) => {
         const messageData = JSON.parse(message.toString());
-        const {recipient, text} = messageData;
-        if (recipient && text) {
+        console.log(messageData);
+        const {recipient, text, file} = messageData;
+        let filename = null;
+        if(file) {
+            const parts = file.name.split('.');
+            const ext = parts[parts.length - 1];
+            filename = Date.now() + '.' + ext;
+            const path = __dirname + '/uploads/' + filename;
+            const bufferData = Buffer.from(file.data.split(',')[1], 'base64');
+            fs.writeFile(path, bufferData, () => {
+                console.log('file saved:' + path);
+            });
+        }
+
+        if (recipient && (text || file)) {
             const messageDoc = await Message.create({
                 sender: connection.userId,
                 recipient,
                 text,
+                file: file ? filename : null,
             });
             [...wss.clients]
                 .filter(c => c.userId === recipient)
@@ -171,6 +193,7 @@ wss.on('connection', (connection, req) => {
                     text, 
                     sender: connection.userId,
                     recipient,
+                    file: file ? filename : null,
                     _id: messageDoc._id,
                 })));
         }
